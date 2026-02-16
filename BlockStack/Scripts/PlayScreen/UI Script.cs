@@ -457,6 +457,7 @@ public class UIScript : MonoBehaviour
 
     public void pauseButtonClicked()
     {
+        audioScript.playButtonSoundClip();
         if(gamePaused)
         {
             gamePaused = false;
