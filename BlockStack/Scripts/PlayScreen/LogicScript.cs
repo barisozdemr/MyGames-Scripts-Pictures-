@@ -56,6 +56,8 @@ public class LogicScript : MonoBehaviour
 
     private bool rowComboAnimation = false;
     
+    private bool gamePaused = false;
+    
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -83,9 +85,9 @@ public class LogicScript : MonoBehaviour
             oldTime = timer;
         }
         
-        if(!rowComboAnimation) tickTimer += Time.deltaTime;
+        if(!gamePaused && !rowComboAnimation && !isGameOver) tickTimer += Time.deltaTime;
         
-        if (!isGameOver && tickTimer >= tickSpeed)
+        if (tickTimer >= tickSpeed)
         {
             StartCoroutine(tick());
             tickTimer = 0;
@@ -126,6 +128,12 @@ public class LogicScript : MonoBehaviour
         }
         
         clockText.text = timeString;
+    }
+
+    public void togglePause()
+    {
+        if (gamePaused) gamePaused = false;
+        else gamePaused = true;
     }
 
     public void increaseScore(int value)
@@ -439,7 +447,7 @@ public class LogicScript : MonoBehaviour
 
     public void tickButtonClicked()
     {
-        if (!isGameOver && !rowComboAnimation)
+        if (!isGameOver && !rowComboAnimation && !gamePaused)
         {
             StartCoroutine(tick());
             tickTimer = 0;

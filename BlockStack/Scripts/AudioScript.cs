@@ -17,8 +17,8 @@ public class AudioScript : MonoBehaviour
     
     public AudioClip gameOverSoundClip;
 
-    private bool soundOn;
-    private int volumeLevel;
+    private bool soundOn = true;
+    private int volumeLevel = 50;
     
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()

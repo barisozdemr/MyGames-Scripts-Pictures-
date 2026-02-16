@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using NUnit.Framework.Constraints;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -16,6 +17,11 @@ public class UIScript : MonoBehaviour
     public AudioScript audioScript;
 
     public Image rootImage;
+
+    public Image pauseButton;
+    public Sprite pauseSprite;
+    public Sprite playSprite;
+    private bool gamePaused = false;
     
     //========================================
     
@@ -449,21 +455,37 @@ public class UIScript : MonoBehaviour
     
     //===================================================================================
 
+    public void pauseButtonClicked()
+    {
+        if(gamePaused)
+        {
+            gamePaused = false;
+            pauseButton.sprite = playSprite;
+        }
+        else
+        {
+            gamePaused = true;
+            pauseButton.sprite = pauseSprite;
+        }
+        
+        logicScript.togglePause();
+    }
+
     public void leftButtonClicked()
     {
         audioScript.playButtonSoundClip();
-        logicScript.left();
+        if (!gamePaused) logicScript.left();
     }
     
     public void rightButtonClicked()
     {
         audioScript.playButtonSoundClip();
-        logicScript.right();
+        if (!gamePaused) logicScript.right();
     }
     
     public void rotateButtonClicked()
     {
         audioScript.playButtonSoundClip();
-        logicScript.rotate();
+        if (!gamePaused) logicScript.rotate();
     }
 }
