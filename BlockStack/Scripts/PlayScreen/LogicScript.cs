@@ -663,9 +663,9 @@ public class LogicScript : MonoBehaviour
     {
         foreach (int row in rowCombo)
         {
-            for (int j = 0; j < playgroundColumnCount ; j++) // clear combo row
+            for (int i = 0; i < playgroundColumnCount ; i++) // clear combo row
             {
-                map[row][j] = false;
+                map[row][i] = false;
             }
         
             for (int i = row; i > 0; i--) // move rows down that above the combo row
@@ -674,6 +674,11 @@ public class LogicScript : MonoBehaviour
                 {
                     map[i][j] = map[i-1][j];
                 }
+            }
+
+            for (int i = 0; i < playgroundColumnCount ; i++) // clear row zero
+            {
+                map[0][i] = false;
             }
         }
     }
@@ -685,3 +690,4 @@ public class LogicScript : MonoBehaviour
     
     
 }
+
