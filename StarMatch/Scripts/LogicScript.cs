@@ -11,6 +11,9 @@ public class LogicScript : MonoBehaviour
     LogicScript logicScriptInstance;
     
     private string LEVELDATAPATH = "loaded_level_data";
+
+    public GameObject UIManager;
+    private UIScript uiScript;
     
     private Random random = new Random();
 
@@ -27,7 +30,6 @@ public class LogicScript : MonoBehaviour
     private float playgroundTopAnchor = 640f;
     private float playgroundBottomAnchor = -860f;
     
-    
     void Awake()
     {
         logicScriptInstance = this;
@@ -36,6 +38,9 @@ public class LogicScript : MonoBehaviour
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
+        uiScript = UIManager.GetComponent<UIScript>();
+        uiScript.setPlaygroundTransform(playgroundTransform);
+        
         buildLevel();
     }
 
@@ -81,6 +86,7 @@ public class LogicScript : MonoBehaviour
         int rowCount = int.Parse(levelGridHeight);
         int colCount = int.Parse(levelGridWidth);
         
+        //========================================================================================= Create Block Factory
         int blockCount = rowCount * colCount;
         
         Block[][] blocks = new Block[rowCount][];
@@ -95,17 +101,47 @@ public class LogicScript : MonoBehaviour
                 blocks[i][j] = factory.getNextBlock();
             }
         }
+        
+        //======================================================================================= Determine UI Positions
+        Vector2[][] cellUIPositionMatrix = new Vector2[rowCount][];
+        for (int i = 0; i < rowCount; i++)
+        {
+            cellUIPositionMatrix[i] = new Vector2[colCount];
+        }
+            
+        float horizontalLength = playgroundRightAnchor - playgroundLeftAnchor;
+        float verticalLength = playgroundTopAnchor - playgroundBottomAnchor;
+            
+        float cellGap = Math.Min(horizontalLength/colCount, verticalLength/rowCount);
+            
+        Vector2 playgroundCenter = new Vector2(0, playgroundBottomAnchor + (playgroundTopAnchor - playgroundBottomAnchor)/2);
+            
+        Vector2 topLeftUIPosition = new Vector2(playgroundLeftAnchor + cellGap/2, playgroundTopAnchor - cellGap/2);
 
-        Game game = new Game(logicScriptInstance,
-            playgroundLeftAnchor,
-            playgroundRightAnchor,
-            playgroundTopAnchor,
-            playgroundBottomAnchor,
+        for (int i = 0; i<rowCount; i++)  //=== determine UI Positions
+        {
+            for (int j = 0; j<colCount; j++)
+            {
+                cellUIPositionMatrix[i][j] = topLeftUIPosition + new Vector2(cellGap*j,-cellGap*i);
+            }
+        }
+        
+        uiScript.setUIPositionMatrix(cellUIPositionMatrix);
+        uiScript.setCellGap(cellGap);
+        
+        //========================================================================================== Create And Set Game
+
+        Game game = new Game(
+            uiScript,
+            logicScriptInstance,
+            cellGap,
+            cellUIPositionMatrix,
             rowCount,
             colCount,
             moveCount,
             blocks,
-            factory);
+            factory
+            );
         
         for (int i=0 ; i<rowCount ; i++)
         {
@@ -115,12 +151,16 @@ public class LogicScript : MonoBehaviour
             }
         }
         
+        factory.setGame(game);
+        
         setComboCounts(game);
     }
 
     void setComboCounts(Game game)
     {
         Debug.Log("**setComboCounts**");
+        
+        game.debugLogMap();
         
         HashSet<Block> alreadySetBlocks = new HashSet<Block>();
         
@@ -135,8 +175,12 @@ public class LogicScript : MonoBehaviour
                 if(alreadySetBlocks.Contains(block))
                 {
                     debug += "block combo is already set\n";
+                    Debug.Log(debug);
                     continue;
                 }
+
+                block.comboCount = 1;
+                block.comboBlocks = new List<Block>();
                 
                 HashSet<Block> thisLoop = new HashSet<Block>();
                 
@@ -173,7 +217,7 @@ public class LogicScript : MonoBehaviour
         
         if(thisLoop.Contains(current)) return 0;
         
-        if(current.getType() != type) return 0;
+        if(!current.isColoredBlock || current.getType() != type) return 0;
         
         block.addComboBlock(current);
         thisLoop.Add(current);
@@ -188,7 +232,7 @@ public class LogicScript : MonoBehaviour
         return totalCombo;
     }
     
-    BlockType blockTypeConverter(String type)
+    BlockType blockTypeConverter(string type)
     {
         if(type == "r") return BlockType.Red;
         else if(type == "g") return BlockType.Green;
@@ -215,64 +259,72 @@ public class LogicScript : MonoBehaviour
 
     class Game
     {
+        private int rowCount;
+        private int colCount;
+        
         private Block[][] map;
 
         private LogicScript logicScript;
+        private UIScript uiScript;
         private BlockFactory factory;
 
-        private bool isBlocksFalling = false;
+        public bool isAnimationPlaying = false;
+        public bool isGameDone = false;
         
         private float cellGap;
-        private Vector2[][] cellUIPositionMatrix;
-
-        private int rowCount;
-        private int colCount;
+        public readonly Vector2[][] cellUIPositionMatrix;
+        
         private int moveCount;
+
+        private int boxCount = 0;
+        private int stoneCount = 0;
+        private int vaseCount = 0;
 
         public List<(int,int)> destroyedBlocksRowAndColumn = new List<(int,int)>();
 
-        public Game(LogicScript logicScript, float left, float right, float top, float bottom, 
+        public Game(UIScript uiScript, LogicScript logicScript, float cellGap, Vector2[][] cellUIPositionMatrix, 
             int rowCount, int columnCount, int moveCount, 
             Block[][] gridBlocks, BlockFactory factory)
         {
-            Debug.Log("Game()\n"+"left:"+left+", right:"+right+", top:"+top+", bottom:"+bottom+", rowCount:"+rowCount+", columnCount:"+columnCount);
-            this.factory = factory;
+            Debug.Log("Game()\n"+"rowCount:"+rowCount+", columnCount:"+columnCount);
+            this.uiScript = uiScript;
+            this.logicScript = logicScript;
+            this.cellGap = cellGap;
+            this.cellUIPositionMatrix = cellUIPositionMatrix;
             this.rowCount = rowCount;
             this.colCount = columnCount;
             this.moveCount = moveCount;
-            
-            cellUIPositionMatrix = new Vector2[rowCount][];
-            for (int i = 0; i < rowCount; i++)
-            {
-                cellUIPositionMatrix[i] = new Vector2[columnCount];
-            }
-            
             map = gridBlocks;
+            this.factory = factory;
             
-            float horizontalLength = right - left;
-            float verticalLength = top - bottom;
-            
-            cellGap = Math.Min(horizontalLength/columnCount, verticalLength/rowCount);
-            
-            Vector2 playgroundCenter = new Vector2(0, bottom + (top - bottom)/2);
-            
-            Vector2 topLeftUIPosition = new Vector2(left + cellGap/2, top - cellGap/2);
+            setBlocksRectAndObstacleCount();
+        }
 
-            for (int i = 0; i<rowCount; i++)  //=== store UI Positions
+        void setBlocksRectAndObstacleCount()
+        {
+            for (int i = 0; i<rowCount; i++)  //=== set Blocks UI Positions(RectTransform) And Obstacle Counts
             {
-                for (int j = 0; j<columnCount; j++)
-                {
-                    cellUIPositionMatrix[i][j] = topLeftUIPosition + new Vector2(cellGap*j,-cellGap*i);
-                }
-            }
-            
-            for (int i = 0; i<rowCount; i++)  //=== set Blocks UI Positions
-            {
-                for (int j = 0; j<columnCount; j++)
+                for (int j = 0; j<colCount; j++)
                 {
                     map[i][j].rect.anchoredPosition = cellUIPositionMatrix[i][j];
                     map[i][j].rect.sizeDelta = new Vector2(cellGap, cellGap);
                     map[i][j].rect.localScale = new Vector2(1,1);
+
+                    if (map[i][j].isObstacle)
+                    {
+                        if (map[i][j].getType() == BlockType.Box)
+                        {
+                            boxCount++;
+                        }
+                        else if (map[i][j].getType() == BlockType.Stone)
+                        {
+                            stoneCount++;
+                        }
+                        else if (map[i][j].getType() == BlockType.Vase)
+                        {
+                            vaseCount++;
+                        }
+                    }
                 }
             }
         }
@@ -297,8 +349,148 @@ public class LogicScript : MonoBehaviour
             if (!destroyedBlocksRowAndColumn.Contains((row, column))) destroyedBlocksRowAndColumn.Add((row, column));
         }
 
+        public void decreaseObstacleCount(BlockType type)
+        {
+            if(type == BlockType.Box) boxCount--;
+            else if(type == BlockType.Stone) stoneCount--;
+            else if(type == BlockType.Vase) vaseCount--;
+        }
+
+        public void decreaseMoveCount()
+        {
+            moveCount--;
+        }
+        
+        public void checkIfGameIsOver()
+        {
+            if (boxCount == 0 && stoneCount == 0 && vaseCount == 0)
+            {
+                isGameDone = true;
+                Debug.Log("Level Won!");
+            }
+            if (moveCount == 0)
+            {
+                isGameDone = true;
+                Debug.Log("Game Over!");
+            }
+            
+            Debug.Log("boxCount: "+boxCount+"stoneCount: "+stoneCount+"vaseCount: "+vaseCount+"\nmoveCount: "+moveCount);
+        }
+
+        public void addRocket(int row, int col)
+        {
+            Block rocketBlock = factory.getRandomRocket(row, col);
+            
+            rocketBlock.rect.anchoredPosition = cellUIPositionMatrix[row][col];
+            rocketBlock.rect.sizeDelta = new Vector2(cellGap, cellGap);
+            rocketBlock.rect.localScale = new Vector2(1,1);
+            
+            map[row][col] = rocketBlock;
+        }
+
+        public void shootRockets(string direction, int row, int col)
+        {
+            logicScript.StartCoroutine(shootRocketsMasterCoroutine(direction, row, col));
+        }
+
+        public IEnumerator shootRocketsMasterCoroutine(string direction, int row, int col)
+        {
+            bool[] flags = new bool[2];
+
+            isAnimationPlaying = true;
+            
+            float timeStep = 0.2f;
+            
+            if (direction == "horizontal")
+            {
+                logicScript.StartCoroutine(shootRocketsHorizontal(row, col, timeStep, flags, 0));
+                logicScript.StartCoroutine(uiScript.shootRocketsHorizontal(row, col, timeStep, flags, 1));
+            }
+            else if (direction == "vertical")
+            {
+                logicScript.StartCoroutine(shootRocketsVertical(row, col, timeStep, flags, 0));
+                logicScript.StartCoroutine(uiScript.shootRocketsVertical(row, col, timeStep, flags, 1));
+            }
+            
+            yield return logicScript.StartCoroutine(WaitForAllCoroutines(flags));
+            
+            fallColumns();
+        }
+        
+        IEnumerator shootRocketsHorizontal(int row, int col, float timeStep, bool[] flags, int flagIndex)
+        {
+            float timer = 0;
+    
+            int targetStepCount = Math.Max(col + 1, colCount - col);
+    
+            while (true)
+            {
+                int step = (int)(timer / timeStep);
+        
+                if(step == targetStepCount)
+                {
+                    flags[flagIndex] = true;
+                    yield break;
+                }
+        
+                if(col - step >= 0)
+                {
+                    map[row][col-step].decreaseHealth();
+                }
+        
+                if(col + step < colCount)
+                {
+                    map[row][col+step].decreaseHealth();
+                }
+        
+                yield return null;
+            }
+        }
+        
+        IEnumerator shootRocketsVertical(int row, int col, float timeStep, bool[] flags, int flagIndex)
+        {
+            float timer = 0;
+    
+            int targetStepCount = Math.Max(row + 1, rowCount - row);
+    
+            while (true)
+            {
+                int step = (int)(timer / timeStep);
+        
+                if(step == targetStepCount)
+                {
+                    flags[flagIndex] = true;
+                    yield break;
+                }
+        
+                if(row - step >= 0)
+                {
+                    map[row-step][col].decreaseHealth();
+                }
+        
+                if(row + step < colCount)
+                {
+                    map[row+step][col].decreaseHealth();
+                }
+        
+                yield return null;
+            }
+        }
+
         public void fallColumns()
         {
+            //================================================================= DEBUG
+            string debug = "destroyedBlocksRowAndColumn:\n";
+            for (int i = 0; i < destroyedBlocksRowAndColumn.Count; i++)
+            {
+                int row = destroyedBlocksRowAndColumn[i].Item1;
+                int col = destroyedBlocksRowAndColumn[i].Item2;
+                
+                debug += "row:" + row + ", col:" + col + "\n";
+            }
+            Debug.Log(debug);
+            //=======================================================================
+            
             Dictionary<int, List<int>> destroyedRowsOfFallingColumns = new Dictionary<int, List<int>>();
                 
             for (int i = 0; i < destroyedBlocksRowAndColumn.Count; i++)
@@ -316,68 +508,214 @@ public class LogicScript : MonoBehaviour
 
                 destroyedRowsOfFallingColumns[col].Add(row);
             }
-
+            
+            debug = "destroyedBlocksRowAndColumn:\n";
             foreach (var pair in destroyedRowsOfFallingColumns)
             {
                 int column = pair.Key;
                 List<int> destroyedRows = pair.Value;
                 
-                //======================================================================================================
-                //=====================================================  shift down and fill top with random blocks
-                
-                destroyedRows.Sort((a, b) => b.CompareTo(a));
+                debug += "column:" + column + " - rows:";
+                foreach (int row in destroyedRows) debug += row + ", ";
+                debug += "\n";
+            }
+            Debug.Log(debug);
 
-                List<(int,int)> fallingCountAndStartingRow = new List<(int,int)>();
+            //==========================================================================================================
+            List<(int, List<int>, int)> fallDataOfColumns = new List<(int, List<int>, int)>();
+            //===== Column (int),  Falling Rows List (List<int>),  Drop Count (int)
                 
-                int offset = 1;
+            foreach (var pair in destroyedRowsOfFallingColumns)
+            {
+                int column = pair.Key;
+                List<int> destroyedRows = pair.Value;
+                
+                //=====================================================  shift down and fill top with random blocks
+                destroyedRows.Sort((a, b) => b.CompareTo(a));
+                
+                List<(int,int)> shiftCountAndStartingRow = new List<(int,int)>();
+                
+                int offset = 0;
                 int consecutive;
                 for(int i=0 ; i<destroyedRows.Count ; i++)
                 {
                     consecutive = 1;
                     offset++;
-                    while (i + 1 < destroyedRows.Count && destroyedRows[i+1] == destroyedRows[i] + 1)
+                    while (i + 1 < destroyedRows.Count && destroyedRows[i+1] == destroyedRows[i] - 1)
                     {
                         i++;
                         consecutive++;
+                        offset++;
                     }
                     
-                    fallingCountAndStartingRow.Add((offset, destroyedRows[i]-consecutive+1));
-                    
-                    addRandomBlocksToColumnAndShift(destroyedRows[i]-1, column, offset);
+                    shiftCountAndStartingRow.Add((consecutive, destroyedRows[i]-1));
                 }
                 
-                //======================================================================================================
-                //================================================================  fall ui rectTransform of blocks
-                
-                fallingCountAndStartingRow.Sort((a, b) => b.Item1.CompareTo(a.Item1));
+                shiftCountAndStartingRow.Sort((a, b) => a.Item2.CompareTo(b.Item2));
 
-                int previousStartingRow = -1;
-                for (int i = 0; i < fallingCountAndStartingRow.Count; i++)
+                int topOffset = 0;
+                for(int i = 0; i < shiftCountAndStartingRow.Count; i++)
                 {
-                    int count = fallingCountAndStartingRow[i].Item1;
-                    int startingRow = fallingCountAndStartingRow[i].Item2;
+                    int count = shiftCountAndStartingRow[i].Item1;
+                    int startingRow = shiftCountAndStartingRow[i].Item2;
                     
-                    List<int> fallingRows = new List<int>();
+                    addRandomBlocksToColumnAndShift(startingRow, column, count, topOffset);
                     
-                    for (int j = startingRow; j > previousStartingRow; j--)
-                    {
-                        fallingRows.Add(j);
-                    }
-                    previousStartingRow = startingRow;
-                    
-                    fallingRows.Sort((a,b) => b.CompareTo(a));
+                    topOffset += count;
+                }
+                
+                //===================================================== determine falling blocks and falling counts
+                if (shiftCountAndStartingRow.Count > 1) // => different rows falling different heights
+                {
+                    int lastRow = destroyedRows[0];
+                    int dropCount = 0;
 
-                    logicScript.StartCoroutine(fall(column, fallingRows, count));
+                    debug = "";
+                    for (int i = 0; i < destroyedRows.Count; i++)
+                    {
+                        int row = destroyedRows[i];
+                        
+                        List<int> fallingRows = new List<int>();
+
+                        if (i + 1 >= destroyedRows.Count)
+                        {
+                            dropCount++;
+
+                            for (int j = lastRow; j >= 0; j--)
+                            {
+                                fallingRows.Add(j);
+                            }
+                        }
+                        else if (row-1 != destroyedRows[i+1])
+                        {
+                            int count = row - destroyedRows[i+1] - 1;
+                            dropCount += count;
+                            
+                            for (int j = lastRow; j > lastRow - count; j--)
+                            {
+                                fallingRows.Add(j);
+                            }
+
+                            lastRow = lastRow - count;
+                        }
+                        else if (row-1 == destroyedRows[i+1])
+                        {
+                            i++;
+                            dropCount++;
+                            row--;
+                            
+                            while(i + 1 < destroyedRows.Count && row-1 == destroyedRows[i+1])
+                            {
+                                i++;
+                                dropCount++;
+                                row--;
+                            }
+
+                            if (i + 1 >= destroyedRows.Count)
+                            {
+                                dropCount++;
+                                
+                                for (int j = lastRow; j >= 0; j--)
+                                {
+                                    fallingRows.Add(j);
+                                }
+                            }
+                            else
+                            {
+                                int count = row - destroyedRows[i+1] - 1;
+                                dropCount += count;
+                            
+                                for (int j = lastRow; j > lastRow - count; j--)
+                                {
+                                    fallingRows.Add(j);
+                                }
+                                
+                                lastRow = lastRow - count;
+                            }
+                        }
+                        
+                        fallingRows.Sort((a,b) => b.CompareTo(a));
+                        
+                        debug += "column:"+column+", dropCount:"+dropCount+"\nfallingRows = ";
+                        foreach (int r in fallingRows) debug += r + ", ";
+                        debug += "\n";
+                        
+                        fallDataOfColumns.Add((column, fallingRows, dropCount));
+                    }
+                    Debug.Log(debug);
+                }
+                else // => all rows falling same height
+                {
+                    int endingRow = -1;
+                    int count = 1;
+                    int startingRow = destroyedRows[0];
+
+                    int j = 0;
+                    while(j + 1 < destroyedRows.Count && destroyedRows[j]-1 == destroyedRows[j+1])
+                    {
+                        count++;
+                        j++;
+                    }
+                
+                    List<int> fallingRows = new List<int>();
+                
+                    for (int i = startingRow; i > endingRow; i--)
+                    {
+                        fallingRows.Add(i);
+                    }
+                
+                    fallingRows.Sort((a,b) => b.CompareTo(a));
+                    
+                    debug = "column:"+column+", count:"+count+"\nfallingRows = ";
+                    foreach (int row in fallingRows) debug += row + ", ";
+                    Debug.Log(debug);
+                    
+                    fallDataOfColumns.Add((column, fallingRows, count));
                 }
             }
+            //==========================================================================================================
+            
+            debugLogMap();
+                
+            logicScript.setComboCounts(this);
+            
+            destroyedBlocksRowAndColumn.Clear();
+            
+            logicScript.StartCoroutine(masterFallCoroutine(fallDataOfColumns));
         }
 
-        void addRandomBlocksToColumnAndShift(int startRow, int column, int count)
+        public void debugLogMap()
+        {
+            string debug = "      0- 1- 2- 3- 4- 5\n";
+
+            for (int i = 0; i < rowCount; i++)
+            {
+                debug += i + " - ";
+                for (int j = 0; j < colCount; j++)
+                {
+                    BlockType type = map[i][j].getType();
+
+                    if (type == BlockType.Red) debug += "R  ";
+                    else if (type == BlockType.Green) debug += "G  ";
+                    else if (type == BlockType.Blue) debug += "B  ";
+                    else if (type == BlockType.Yellow) debug += "Y  ";
+                    else if (type == BlockType.Box) debug += "X  ";
+                    else if (type == BlockType.Stone) debug += "S  ";
+                    else if (type == BlockType.Vase) debug += "V  ";
+                }
+                debug += "\n";
+            }
+            
+            Debug.Log(debug);
+        }
+
+        void addRandomBlocksToColumnAndShift(int startRow, int column, int count, int topOffset)
         {
             Debug.Log("addRandomBlocksToColumnAndShift\nstartRow:"+startRow+", column:"+column+", count:"+count);
             for (int i = startRow; i >= 0; i--) //== shift
             {
-                map[i-count][column] = map[i][column];
+                map[i+count][column] = map[i][column];
+                map[i+count][column].updateRowAndColumn(i+count, column);
             }
 
             for (int i = 0; i < count; i++) //== add random blocks to top
@@ -385,40 +723,60 @@ public class LogicScript : MonoBehaviour
                 map[i][column] = factory.getRandomBlock(i,column);
 
                 Vector2 pos = cellUIPositionMatrix[0][column];
-                pos.y -= cellGap * (count - i);
+                pos.y += cellGap * (count - i + topOffset);
                 
                 map[i][column].rect.anchoredPosition = pos;
                 map[i][column].rect.sizeDelta = new Vector2(cellGap, cellGap);
                 map[i][column].rect.localScale = new Vector2(1,1);
             }
-            
         }
 
-        IEnumerator fall(int column, List<int> fallingRows, int count)
+        IEnumerator masterFallCoroutine(List<(int, List<int>, int)> fallDataOfColumns)
         {
-            float targetY = map[fallingRows[0]][column].rect.anchoredPosition.y - count*cellGap;
-            float speed = -2 * cellGap;
-            float acceleration = -2 * cellGap;
-    
-            while(true){
-                foreach(int row in fallingRows){
-                    Vector2 pos = map[row][column].rect.anchoredPosition;
-                    pos.y += Time.deltaTime * speed;
-                    map[row][column].rect.anchoredPosition = pos;
+            isAnimationPlaying = true;
+            
+            bool[] flags = new bool[fallDataOfColumns.Count];
+
+            int index = 0;
+            foreach (var data in fallDataOfColumns)
+            {
+                int column = data.Item1;
+                int dropCount = data.Item3;
+                List<int> fallingRows = data.Item2;
+                
+                Dictionary<RectTransform, int> rectAndRows = new Dictionary<RectTransform, int>();
+
+                foreach (var row in fallingRows)
+                {
+                    rectAndRows.Add(map[row][column].rect, row);
                 }
                 
-                speed += Time.deltaTime * acceleration;
+                logicScript.StartCoroutine(uiScript.fall(column, rectAndRows, dropCount, cellGap, flags, index));
+
+                index++;
+            }
+
+            yield return logicScript.StartCoroutine(WaitForAllCoroutines(flags));
+
+            isAnimationPlaying = false;
+            Debug.Log("Tüm coroutineler bitti, master tamamlandı!");
+        }
         
-                if(map[fallingRows[0]][column].rect.anchoredPosition.y <= targetY){
-                    foreach(int row in fallingRows){
-                        Vector2 pos = map[row][column].rect.anchoredPosition;
-                        pos.y = targetY;
-                        map[row][column].rect.anchoredPosition = pos;
+        IEnumerator WaitForAllCoroutines(bool[] flags)
+        {
+            while (true)
+            {
+                bool g = true;
+                foreach (bool b in flags)
+                {
+                    if(!b)
+                    {
+                        g = false;
+                        break;
                     }
-            
-                    yield break;
                 }
-        
+                
+                if(g) yield break;
                 yield return null;
             }
         }
@@ -439,17 +797,17 @@ public class LogicScript : MonoBehaviour
 
     class BlockSpriteProvider
     {
-        public Sprite redBlockSprite;
-        public Sprite greenBlockSprite;
-        public Sprite blueBlockSprite;
-        public Sprite yellowBlockSprite;
+        private Sprite redBlockSprite;
+        private Sprite greenBlockSprite;
+        private Sprite blueBlockSprite;
+        private Sprite yellowBlockSprite;
     
-        public Sprite boxBlockSprite;
-        public Sprite stoneBlockSprite;
-        public Sprite vaseBlockSprite;
+        private Sprite boxBlockSprite;
+        private Sprite stoneBlockSprite;
+        private Sprite vaseBlockSprite;
         
-        public Sprite verticalRocketSprite;
-        public Sprite horizontalRocketSprite;
+        private Sprite verticalRocketSprite;
+        private Sprite horizontalRocketSprite;
 
         public BlockSpriteProvider()
         {
@@ -487,13 +845,15 @@ public class LogicScript : MonoBehaviour
     class Block
     {
         private Game game;
+        private Transform playgroundTransform;
+        private BlockSpriteProvider provider;
         
         private BlockType type;
         public RectTransform rect;
         public Button button;
 
-        private bool isColoredBlock;
-        private bool isObstacle;
+        public bool isColoredBlock;
+        public bool isObstacle;
         
         public int comboCount = 1;
         public List<Block> comboBlocks = new List<Block>();
@@ -504,6 +864,9 @@ public class LogicScript : MonoBehaviour
 
         public Block(BlockType type, BlockSpriteProvider provider, int row, int column, Transform playgroundTransform)
         {
+            this.playgroundTransform = playgroundTransform;
+            this.provider = provider;
+            
             this.row = row;
             this.column = column;
             
@@ -518,10 +881,10 @@ public class LogicScript : MonoBehaviour
                 
             Image image = obj.AddComponent<Image>();
             
-            setTypeHealthSprite(type, image, provider);
+            setTypeHealthSprite(type, image);
         }
 
-        void setTypeHealthSprite(BlockType type, Image image, BlockSpriteProvider provider)
+        void setTypeHealthSprite(BlockType type, Image image)
         {
             if (type == BlockType.Red)
             {
@@ -529,7 +892,7 @@ public class LogicScript : MonoBehaviour
                 isObstacle = false;
                 isColoredBlock = true;
                 health = 1;
-                image.sprite = provider.redBlockSprite;
+                image.sprite = provider.GetSprite(type);
             }
             else if(type == BlockType.Green)
             {
@@ -537,7 +900,7 @@ public class LogicScript : MonoBehaviour
                 isObstacle = false;
                 isColoredBlock = true;
                 health = 1;
-                image.sprite = provider.greenBlockSprite;
+                image.sprite = provider.GetSprite(type);
             }
             else if(type == BlockType.Blue)
             {
@@ -545,7 +908,7 @@ public class LogicScript : MonoBehaviour
                 isObstacle = false;
                 isColoredBlock = true;
                 health = 1;
-                image.sprite = provider.blueBlockSprite;
+                image.sprite = provider.GetSprite(type);
             }
             else if(type == BlockType.Yellow)
             {
@@ -553,7 +916,7 @@ public class LogicScript : MonoBehaviour
                 isObstacle = false;
                 isColoredBlock = true;
                 health = 1;
-                image.sprite = provider.yellowBlockSprite;
+                image.sprite = provider.GetSprite(type);
             }
             else if(type == BlockType.Box)
             {
@@ -561,7 +924,7 @@ public class LogicScript : MonoBehaviour
                 isObstacle = true;
                 isColoredBlock = false;
                 health = 1;
-                image.sprite = provider.boxBlockSprite;
+                image.sprite = provider.GetSprite(type);
             }
             else if(type == BlockType.Stone)
             {
@@ -569,7 +932,7 @@ public class LogicScript : MonoBehaviour
                 isObstacle = true;
                 isColoredBlock = false;
                 health = 1;
-                image.sprite = provider.stoneBlockSprite;
+                image.sprite = provider.GetSprite(type);
             }
             else if(type == BlockType.Vase)
             {
@@ -577,7 +940,7 @@ public class LogicScript : MonoBehaviour
                 isObstacle = true;
                 isColoredBlock = false;
                 health = 2;
-                image.sprite = provider.vaseBlockSprite;
+                image.sprite = provider.GetSprite(type);
             }
             else if(type == BlockType.VerticalRocket)
             {
@@ -585,7 +948,7 @@ public class LogicScript : MonoBehaviour
                 isObstacle = false;
                 isColoredBlock = false;
                 health = 1;
-                image.sprite = provider.verticalRocketSprite;
+                image.sprite = provider.GetSprite(type);
             }
             else if(type == BlockType.HorizontalRocket)
             {
@@ -593,7 +956,7 @@ public class LogicScript : MonoBehaviour
                 isObstacle = false;
                 isColoredBlock = false;
                 health = 1;
-                image.sprite = provider.horizontalRocketSprite;
+                image.sprite = provider.GetSprite(type);
             }
         }
 
@@ -607,6 +970,12 @@ public class LogicScript : MonoBehaviour
             this.game = game;
         }
 
+        public void updateRowAndColumn(int row, int col)
+        {
+            this.row = row;
+            this.column = col;
+        }
+
         public void buttonClicked()
         {
             Debug.Log("**buttonClicked** row: "+row+", column: "+column);
@@ -615,25 +984,46 @@ public class LogicScript : MonoBehaviour
             debug += comboCount.ToString() + "\n";
             debug = logDebugComboBlocks(debug);
             Debug.Log(debug);
-            
-            if (comboCount <= 1)
-            {
-                return;
-            }
-            
-            foreach (Block block in comboBlocks)
-            {
-                int blockRow = block.row;
-                int blockColumn = block.column;
 
-                if (blockColumn-1 >= 0 && game.getMap()[blockRow][blockColumn-1].isObstacle) game.getMap()[blockRow][blockColumn-1].decreaseHealth();
-                if (blockColumn+1 < game.getColCount() && game.getMap()[blockRow][blockColumn+1].isObstacle) game.getMap()[blockRow][blockColumn+1].decreaseHealth();
-                if (blockRow-1 >= 0 && game.getMap()[blockRow-1][blockColumn].isObstacle) game.getMap()[blockRow-1][blockColumn].decreaseHealth();
-                if (blockRow+1 < game.getRowCount() && game.getMap()[blockRow+1][blockColumn].isObstacle) game.getMap()[blockRow+1][blockColumn].decreaseHealth();
+            if (isColoredBlock)
+            {
+                if (comboCount <= 1 || game.isAnimationPlaying || game.isGameDone) return;
+            
+                game.decreaseMoveCount();
                 
-                block.destroyBlock();
+                foreach (Block block in comboBlocks)
+                {
+                    int blockRow = block.row;
+                    int blockColumn = block.column;
+
+                    if (blockColumn-1 >= 0 && game.getMap()[blockRow][blockColumn-1].isObstacle) game.getMap()[blockRow][blockColumn-1].decreaseHealth();
+                    if (blockColumn+1 < game.getColCount() && game.getMap()[blockRow][blockColumn+1].isObstacle) game.getMap()[blockRow][blockColumn+1].decreaseHealth();
+                    if (blockRow-1 >= 0 && game.getMap()[blockRow-1][blockColumn].isObstacle) game.getMap()[blockRow-1][blockColumn].decreaseHealth();
+                    if (blockRow+1 < game.getRowCount() && game.getMap()[blockRow+1][blockColumn].isObstacle) game.getMap()[blockRow+1][blockColumn].decreaseHealth();
+                
+                    block.destroyBlock();
+                }
+
+                if (comboCount >= 5) // create rocket
+                {
+                    game.destroyedBlocksRowAndColumn.Remove((row, column));
+                    
+                    game.addRocket(row, column);
+                }
+            }
+            else if(!isObstacle) // is rocket
+            {
+                Debug.Log("Rocket Clicked");
+                if (game.isAnimationPlaying || game.isGameDone) return;
+                
+                game.decreaseMoveCount();
+                destroyBlock();
+
+                if (type == BlockType.HorizontalRocket) game.shootRockets("horizontal", row, column);
+                if (type == BlockType.VerticalRocket) game.shootRockets("vertical", row, column);
             }
             
+            game.checkIfGameIsOver();
             game.fallColumns();
         }
 
@@ -654,8 +1044,10 @@ public class LogicScript : MonoBehaviour
             comboBlocks.Add(block);
         }
 
-        bool decreaseHealth() // return true if decreased health is zero
+        public bool decreaseHealth() // return true if decreased health is zero
         {
+            if (health == 0) return false;
+            
             health--;
             if (health <= 0)
             {
@@ -668,6 +1060,7 @@ public class LogicScript : MonoBehaviour
 
         void destroyBlock()
         {
+            if(isObstacle) game.decreaseObstacleCount(type);
             game.addDestroyedBlock(row, column);
             Destroy(rect.gameObject);
         }
@@ -676,6 +1069,7 @@ public class LogicScript : MonoBehaviour
     class BlockFactory
     {
         private Random random;
+        private Game game;
         
         private BlockType[] types;
         private BlockSpriteProvider provider;
@@ -706,6 +1100,11 @@ public class LogicScript : MonoBehaviour
                 
                 types[i] = blockTypeConverter(data[dataIndex]);
             }
+        }
+
+        public void setGame(Game game)
+        {
+            this.game = game;
         }
 
         BlockType blockTypeConverter(string type)
@@ -747,11 +1146,31 @@ public class LogicScript : MonoBehaviour
         public Block getRandomBlock(int row, int col)
         {
             int random = this.random.Next(0,4);
+
+            Block block;
             
-            if (random == 0) return new Block(BlockType.Red, provider, row, col, playgroundTransform);
-            else if (random == 1) return new Block(BlockType.Green, provider, row, col, playgroundTransform);
-            else if (random == 2) return new Block(BlockType.Blue, provider, row, col, playgroundTransform);
-            else /* (random == 3) */ return new Block(BlockType.Yellow, provider, row, col, playgroundTransform);
+            if (random == 0) block = new Block(BlockType.Red, provider, row, col, playgroundTransform);
+            else if (random == 1) block = new Block(BlockType.Green, provider, row, col, playgroundTransform);
+            else if (random == 2) block = new Block(BlockType.Blue, provider, row, col, playgroundTransform);
+            else /* (random == 3) */ block = new Block(BlockType.Yellow, provider, row, col, playgroundTransform);
+            
+            block.setGame(game);
+
+            return block;
+        }
+        
+        public Block getRandomRocket(int row, int col)
+        {
+            int random = this.random.Next(0, 2);
+            
+            Block block;
+    
+            if (random == 0) block = new Block(BlockType.HorizontalRocket, provider, row, col, playgroundTransform);
+            else block = new Block(BlockType.VerticalRocket, provider, row, col, playgroundTransform);
+            
+            block.setGame(game);
+
+            return block;
         }
     }
     
