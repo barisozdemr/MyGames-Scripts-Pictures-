@@ -146,8 +146,8 @@ public class UIScript : MonoBehaviour
     
         while (true)
         {
-            rect1.anchoredPosition -=  speed * Time.deltaTime * new Vector2(0, 1);
-            rect2.anchoredPosition +=  speed * Time.deltaTime * new Vector2(0, 1);
+            rect1.anchoredPosition -=  speed * Time.deltaTime * new Vector2(1, 0);
+            rect2.anchoredPosition +=  speed * Time.deltaTime * new Vector2(1, 0);
         
             if(rect1.anchoredPosition.x <= rocket1TargetX)
             {

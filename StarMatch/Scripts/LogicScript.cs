@@ -412,8 +412,11 @@ public class LogicScript : MonoBehaviour
                 logicScript.StartCoroutine(uiScript.shootRocketsVertical(row, col, timeStep, flags, 1));
             }
             
+            Debug.Log("waiting coroutines...");
             yield return logicScript.StartCoroutine(WaitForAllCoroutines(flags));
+            Debug.Log("coroutines done!");
             
+            checkIfGameIsOver();
             fallColumns();
         }
         
@@ -425,6 +428,8 @@ public class LogicScript : MonoBehaviour
     
             while (true)
             {
+                timer += Time.deltaTime;
+                
                 int step = (int)(timer / timeStep);
         
                 if(step == targetStepCount)
@@ -455,6 +460,8 @@ public class LogicScript : MonoBehaviour
     
             while (true)
             {
+                timer += Time.deltaTime;
+                
                 int step = (int)(timer / timeStep);
         
                 if(step == targetStepCount)
@@ -468,7 +475,7 @@ public class LogicScript : MonoBehaviour
                     map[row-step][col].decreaseHealth();
                 }
         
-                if(row + step < colCount)
+                if(row + step < rowCount)
                 {
                     map[row+step][col].decreaseHealth();
                 }
@@ -1021,6 +1028,8 @@ public class LogicScript : MonoBehaviour
 
                 if (type == BlockType.HorizontalRocket) game.shootRockets("horizontal", row, column);
                 if (type == BlockType.VerticalRocket) game.shootRockets("vertical", row, column);
+
+                return;
             }
             
             game.checkIfGameIsOver();
