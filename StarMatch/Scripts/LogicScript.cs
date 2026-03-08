@@ -256,6 +256,36 @@ public class LogicScript : MonoBehaviour
             else /* (random == 3) */ return BlockType.Yellow;
         }
     }
+    
+    public class BoolRef
+    {
+        private bool value;
+    
+        public BoolRef()
+        {
+            value = false;
+        }
+    
+        public BoolRef(bool value)
+        {
+            this.value = value;
+        }
+    
+        public void setTrue()
+        {
+            value = true;
+        }
+    
+        public void setFalse()
+        {
+            value = false;
+        }
+    
+        public bool getValue()
+        {
+            return value;
+        }
+    }
 
     class Game
     {
@@ -395,33 +425,37 @@ public class LogicScript : MonoBehaviour
 
         public IEnumerator shootRocketsMasterCoroutine(string direction, int row, int col)
         {
-            bool[] flags = new bool[2];
+            BoolRef[] flags = new BoolRef[2];
+            flags[0] = new BoolRef();
+            flags[1] = new BoolRef();
 
             isAnimationPlaying = true;
             
-            float timeStep = 0.2f;
+            float timeStep = 0.1f; //===================== time step
             
             if (direction == "horizontal")
             {
-                logicScript.StartCoroutine(shootRocketsHorizontal(row, col, timeStep, flags, 0));
-                logicScript.StartCoroutine(uiScript.shootRocketsHorizontal(row, col, timeStep, flags, 1));
+                logicScript.StartCoroutine(shootRocketsHorizontal(row, col, timeStep, flags[0]));
+                logicScript.StartCoroutine(uiScript.shootRocketsHorizontal(row, col, timeStep, flags[1]));
             }
             else if (direction == "vertical")
             {
-                logicScript.StartCoroutine(shootRocketsVertical(row, col, timeStep, flags, 0));
-                logicScript.StartCoroutine(uiScript.shootRocketsVertical(row, col, timeStep, flags, 1));
+                logicScript.StartCoroutine(shootRocketsVertical(row, col, timeStep, flags[0]));
+                logicScript.StartCoroutine(uiScript.shootRocketsVertical(row, col, timeStep, flags[1]));
             }
             
             Debug.Log("waiting coroutines...");
-            yield return logicScript.StartCoroutine(WaitForAllCoroutines(flags));
+            yield return logicScript.StartCoroutine(WaitForAllCoroutinesBoolRefArray(flags));
             Debug.Log("coroutines done!");
             
             checkIfGameIsOver();
             fallColumns();
         }
         
-        IEnumerator shootRocketsHorizontal(int row, int col, float timeStep, bool[] flags, int flagIndex)
+        IEnumerator shootRocketsHorizontal(int row, int col, float timeStep, BoolRef flag)
         {
+            List<BoolRef> newFlags = new List<BoolRef>();
+            
             float timer = 0;
     
             int targetStepCount = Math.Max(col + 1, colCount - col);
@@ -432,28 +466,71 @@ public class LogicScript : MonoBehaviour
                 
                 int step = (int)(timer / timeStep);
         
-                if(step == targetStepCount)
+                if(step >= targetStepCount)
                 {
-                    flags[flagIndex] = true;
-                    yield break;
+                    string debug = "row:"+row+", col:"+col+"\ntargetStepCount reached:\n";
+                    debug += "newFlagsCount: "+newFlags.Count+"\n";
+                    
+                    bool g = true;
+                    for(int i=0 ; i<newFlags.Count ; i++)
+                    {
+                        debug += "newFlags["+i+"] = "+newFlags[i].getValue().ToString()+"\n";
+                        
+                        if(!newFlags[i].getValue())
+                        {
+                            g = false;
+                            break;
+                        }
+                    }
+                    
+                    Debug.Log(debug);
+                    
+                    if(g)
+                    {
+                        Debug.Log("logic flag.setTrue()");
+                        flag.setTrue();
+                        yield break;
+                    }
                 }
         
                 if(col - step >= 0)
                 {
-                    map[row][col-step].decreaseHealth();
+                    map[row][col - step].decreaseHealth();
+                    
+                    if (map[row][col - step].isRocket && !map[row][col - step].isRocketShooted)
+                    {
+                        map[row][col - step].isRocketShooted = true;
+                        
+                        (BoolRef flag1, BoolRef flag2) = shootNewRocketsAndReturnFlags(map[row][col - step].getType(), row, col - step, timeStep);
+                    
+                        newFlags.Add(flag1);
+                        newFlags.Add(flag2);
+                    }
                 }
         
                 if(col + step < colCount)
                 {
-                    map[row][col+step].decreaseHealth();
+                    map[row][col + step].decreaseHealth();
+                    
+                    if (map[row][col + step].isRocket && !map[row][col + step].isRocketShooted)
+                    {
+                        map[row][col + step].isRocketShooted = true;
+                        
+                        (BoolRef flag1, BoolRef flag2) = shootNewRocketsAndReturnFlags(map[row][col + step].getType(), row, col + step, timeStep);
+                    
+                        newFlags.Add(flag1);
+                        newFlags.Add(flag2);
+                    }
                 }
         
                 yield return null;
             }
         }
         
-        IEnumerator shootRocketsVertical(int row, int col, float timeStep, bool[] flags, int flagIndex)
+        IEnumerator shootRocketsVertical(int row, int col, float timeStep, BoolRef flag)
         {
+            List<BoolRef> newFlags = new List<BoolRef>();
+            
             float timer = 0;
     
             int targetStepCount = Math.Max(row + 1, rowCount - row);
@@ -464,24 +541,90 @@ public class LogicScript : MonoBehaviour
                 
                 int step = (int)(timer / timeStep);
         
-                if(step == targetStepCount)
+                if(step >= targetStepCount)
                 {
-                    flags[flagIndex] = true;
-                    yield break;
+                    string debug = "row:"+row+", col:"+col+"\ntargetStepCount reached:\n";
+                    debug += "newFlagsCount: "+newFlags.Count+"\n";
+                    
+                    bool g = true;
+                    for(int i=0 ; i<newFlags.Count ; i++)
+                    {
+                        debug += "newFlags["+i+"] = "+newFlags[i].getValue().ToString()+"\n";
+                        
+                        if(!newFlags[i].getValue())
+                        {
+                            g = false;
+                            break;
+                        }
+                    }
+                    
+                    Debug.Log(debug);
+                    
+                    if(g)
+                    {
+                        Debug.Log("logic flag.setTrue()");
+                        flag.setTrue();
+                        yield break;
+                    }
                 }
         
                 if(row - step >= 0)
                 {
-                    map[row-step][col].decreaseHealth();
+                    map[row - step][col].decreaseHealth();
+                    
+                    if (map[row - step][col].isRocket && !map[row - step][col].isRocketShooted)
+                    {
+                        map[row - step][col].isRocketShooted = true;
+                        
+                        (BoolRef flag1, BoolRef flag2) = shootNewRocketsAndReturnFlags(map[row - step][col].getType(), row - step, col, timeStep);
+                    
+                        newFlags.Add(flag1);
+                        newFlags.Add(flag2);
+                    }
                 }
         
                 if(row + step < rowCount)
                 {
-                    map[row+step][col].decreaseHealth();
+                    map[row + step][col].decreaseHealth();
+
+                    if (map[row + step][col].isRocket && !map[row + step][col].isRocketShooted)
+                    {
+                        map[row + step][col].isRocketShooted = true;
+                        
+                        (BoolRef flag1, BoolRef flag2) = shootNewRocketsAndReturnFlags(map[row + step][col].getType(), row + step, col, timeStep);
+                    
+                        newFlags.Add(flag1);
+                        newFlags.Add(flag2);
+                    }
                 }
         
                 yield return null;
             }
+        }
+
+        (BoolRef, BoolRef) shootNewRocketsAndReturnFlags(BlockType type, int row, int col, float timeStep)
+        {
+            string debug = "shootNewRocketsAndReturnFlags\n";
+            
+            BoolRef newFlag = new BoolRef();
+            BoolRef newFlag2 = new BoolRef();
+
+            if (type == BlockType.HorizontalRocket)
+            {
+                debug += "Horizontal Rocket shooted\n";
+                Debug.Log(debug);
+                logicScript.StartCoroutine(shootRocketsHorizontal(row, col, timeStep, newFlag));
+                logicScript.StartCoroutine(uiScript.shootRocketsHorizontal(row, col, timeStep, newFlag2));
+            }
+            else if (type == BlockType.VerticalRocket)
+            {
+                debug += "Vertical Rocket shooted\n";
+                Debug.Log(debug);
+                logicScript.StartCoroutine(shootRocketsVertical(row, col, timeStep, newFlag));
+                logicScript.StartCoroutine(uiScript.shootRocketsVertical(row, col, timeStep, newFlag2));
+            }
+
+            return (newFlag, newFlag2);
         }
 
         public void fallColumns()
@@ -763,13 +906,13 @@ public class LogicScript : MonoBehaviour
                 index++;
             }
 
-            yield return logicScript.StartCoroutine(WaitForAllCoroutines(flags));
+            yield return logicScript.StartCoroutine(WaitForAllCoroutinesArray(flags));
 
             isAnimationPlaying = false;
             Debug.Log("Tüm coroutineler bitti, master tamamlandı!");
         }
         
-        IEnumerator WaitForAllCoroutines(bool[] flags)
+        IEnumerator WaitForAllCoroutinesArray(bool[] flags)
         {
             while (true)
             {
@@ -777,6 +920,25 @@ public class LogicScript : MonoBehaviour
                 foreach (bool b in flags)
                 {
                     if(!b)
+                    {
+                        g = false;
+                        break;
+                    }
+                }
+                
+                if(g) yield break;
+                yield return null;
+            }
+        }
+        
+        IEnumerator WaitForAllCoroutinesBoolRefArray(BoolRef[] flags)
+        {
+            while (true)
+            {
+                bool g = true;
+                for (int i=0 ; i<flags.Length ; i++)
+                {
+                    if(!flags[i].getValue())
                     {
                         g = false;
                         break;
@@ -861,6 +1023,8 @@ public class LogicScript : MonoBehaviour
 
         public bool isColoredBlock;
         public bool isObstacle;
+        public bool isRocket;
+        public bool isRocketShooted;
         
         public int comboCount = 1;
         public List<Block> comboBlocks = new List<Block>();
@@ -898,6 +1062,7 @@ public class LogicScript : MonoBehaviour
                 this.type = BlockType.Red;
                 isObstacle = false;
                 isColoredBlock = true;
+                isRocket = false;
                 health = 1;
                 image.sprite = provider.GetSprite(type);
             }
@@ -906,6 +1071,7 @@ public class LogicScript : MonoBehaviour
                 this.type = BlockType.Green;
                 isObstacle = false;
                 isColoredBlock = true;
+                isRocket = false;
                 health = 1;
                 image.sprite = provider.GetSprite(type);
             }
@@ -914,6 +1080,7 @@ public class LogicScript : MonoBehaviour
                 this.type = BlockType.Blue;
                 isObstacle = false;
                 isColoredBlock = true;
+                isRocket = false;
                 health = 1;
                 image.sprite = provider.GetSprite(type);
             }
@@ -922,6 +1089,7 @@ public class LogicScript : MonoBehaviour
                 this.type = BlockType.Yellow;
                 isObstacle = false;
                 isColoredBlock = true;
+                isRocket = false;
                 health = 1;
                 image.sprite = provider.GetSprite(type);
             }
@@ -930,6 +1098,7 @@ public class LogicScript : MonoBehaviour
                 this.type = BlockType.Box;
                 isObstacle = true;
                 isColoredBlock = false;
+                isRocket = false;
                 health = 1;
                 image.sprite = provider.GetSprite(type);
             }
@@ -938,6 +1107,7 @@ public class LogicScript : MonoBehaviour
                 this.type = BlockType.Stone;
                 isObstacle = true;
                 isColoredBlock = false;
+                isRocket = false;
                 health = 1;
                 image.sprite = provider.GetSprite(type);
             }
@@ -946,6 +1116,7 @@ public class LogicScript : MonoBehaviour
                 this.type = BlockType.Vase;
                 isObstacle = true;
                 isColoredBlock = false;
+                isRocket = false;
                 health = 2;
                 image.sprite = provider.GetSprite(type);
             }
@@ -954,6 +1125,8 @@ public class LogicScript : MonoBehaviour
                 this.type = BlockType.VerticalRocket;
                 isObstacle = false;
                 isColoredBlock = false;
+                isRocket = true;
+                isRocketShooted = false;
                 health = 1;
                 image.sprite = provider.GetSprite(type);
             }
@@ -962,6 +1135,8 @@ public class LogicScript : MonoBehaviour
                 this.type = BlockType.HorizontalRocket;
                 isObstacle = false;
                 isColoredBlock = false;
+                isRocket = true;
+                isRocketShooted = false;
                 health = 1;
                 image.sprite = provider.GetSprite(type);
             }
@@ -1018,13 +1193,15 @@ public class LogicScript : MonoBehaviour
                     game.addRocket(row, column);
                 }
             }
-            else if(!isObstacle) // is rocket
+            else if(isRocket) // is rocket
             {
                 Debug.Log("Rocket Clicked");
                 if (game.isAnimationPlaying || game.isGameDone) return;
                 
                 game.decreaseMoveCount();
                 destroyBlock();
+
+                isRocketShooted = true;
 
                 if (type == BlockType.HorizontalRocket) game.shootRockets("horizontal", row, column);
                 if (type == BlockType.VerticalRocket) game.shootRockets("vertical", row, column);

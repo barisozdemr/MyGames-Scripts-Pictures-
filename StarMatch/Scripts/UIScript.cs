@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -13,6 +14,8 @@ public class UIScript : MonoBehaviour
     private LogicScript logicScript;
     
     private Vector2[][] cellUIPositionMatrix;
+    private int rowCount;
+    private int colCount;
 
     private float cellGap;
     
@@ -33,6 +36,8 @@ public class UIScript : MonoBehaviour
     public void setUIPositionMatrix(Vector2[][] cellUIPositionMatrix)
     {
         this.cellUIPositionMatrix = cellUIPositionMatrix;
+        rowCount = cellUIPositionMatrix.Length;
+        colCount = cellUIPositionMatrix[0].Length;
     }
 
     public void setCellGap(float gap)
@@ -114,9 +119,11 @@ public class UIScript : MonoBehaviour
         }
     }
     
-    public IEnumerator shootRocketsHorizontal(int row, int col, float timeStep, bool[] flags, int flagIndex)
+    public IEnumerator shootRocketsHorizontal(int row, int col, float timeStep, LogicScript.BoolRef flag)
     {
-        float rocket1TargetX = cellUIPositionMatrix[row][col].x - (col + 1) * cellGap;
+        int maxCellDistance = Math.Max(col + 1, colCount - col);
+        
+        float rocket1TargetX = cellUIPositionMatrix[row][col].x - maxCellDistance * cellGap;
         float speed = cellGap / timeStep;
     
         GameObject rocket1 = new GameObject("rocket1");
@@ -153,7 +160,8 @@ public class UIScript : MonoBehaviour
             {
                 Destroy(rocket1);
                 Destroy(rocket2);
-                flags[flagIndex] = true;
+                Debug.Log("row:"+row+", col:"+col+"\nui flag.setTrue()");
+                flag.setTrue();
                 yield break;
             }
         
@@ -161,9 +169,11 @@ public class UIScript : MonoBehaviour
         }
     }
     
-    public IEnumerator shootRocketsVertical(int row, int col, float timeStep, bool[] flags, int flagIndex)
+    public IEnumerator shootRocketsVertical(int row, int col, float timeStep, LogicScript.BoolRef flag)
     {
-        float rocket1TargetY = cellUIPositionMatrix[row][col].y - (row + 1) * cellGap;
+        int maxCellDistance = Math.Max(row + 1, rowCount - row);
+        
+        float rocket1TargetY = cellUIPositionMatrix[row][col].y - maxCellDistance * cellGap;
         float speed = cellGap / timeStep;
     
         GameObject rocket1 = new GameObject("rocket1");
@@ -200,7 +210,8 @@ public class UIScript : MonoBehaviour
             {
                 Destroy(rocket1);
                 Destroy(rocket2);
-                flags[flagIndex] = true;
+                Debug.Log("row:"+row+", col:"+col+"\nui flag.setTrue()");
+                flag.setTrue();
                 yield break;
             }
         
