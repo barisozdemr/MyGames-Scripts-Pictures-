@@ -11,6 +11,9 @@ public class UIScript : MonoBehaviour
     public GameObject logicManager;
     private LogicScript logicScript;
     
+    public GameObject AudioManager;
+    private AudioScript audioScript;
+    
     private RocketSpriteProvider provider;
     
     private Transform playgroundTransform;
@@ -18,10 +21,14 @@ public class UIScript : MonoBehaviour
     public Image endScreenBackgroundImage;
     
     public Transform congratsTextImageTransform;
+    public Image congratsTextImage;
     public Image continueButtonImage;
+    public TextMeshProUGUI continueButtonText;
 
     public Transform gameOverTextImageTransform;
+    public Image gameOverTextImage;
     public Image menuButtonImage;
+    public TextMeshProUGUI menuButtonText;
     
     //========================================================= Level & Playground Settings
     private Vector3[][] cellUIPositionMatrix;
@@ -42,8 +49,9 @@ public class UIScript : MonoBehaviour
     public GameObject highlighterPrefab;
     public GameObject blockClickedParticlePrefab;
     public GameObject rocketCreatedParticlePrefab;
+    public GameObject rocketCreatedParticle2Prefab;
     
-    //======================================================================== Fade In Elements
+    //======================================================================== Fade Elements
     public Image playgroundBackgroundImage;
     public Image levelDataBackgroundImage;
 
@@ -64,10 +72,14 @@ public class UIScript : MonoBehaviour
     public Image vaseObstacleImage;
     public Image vaseObstacleBackgroundImage;
 
-    public Image[] stage1FadeInImages = new Image[2];
+    private Image[] stage1FadeInImages = new Image[2];
     
-    public Image[] stage2FadeInImages = new Image[6];
-    public TextMeshProUGUI[] stage2FadeInTexts = new TextMeshProUGUI[6];
+    private Image[] stage2FadeInImages = new Image[6];
+    private TextMeshProUGUI[] stage2FadeInTexts = new TextMeshProUGUI[6];
+    
+    //================================================
+    private Image[] fadeOutImages = new Image[10];
+    private TextMeshProUGUI[] fadeOutTexts = new TextMeshProUGUI[7];
     
     //===========================================================================================
     
@@ -77,6 +89,8 @@ public class UIScript : MonoBehaviour
     void Start()
     {
         logicScript = logicManager.GetComponent<LogicScript>();
+        
+        audioScript = AudioManager.GetComponent<AudioScript>();
 
         provider = new RocketSpriteProvider();
 
@@ -97,38 +111,28 @@ public class UIScript : MonoBehaviour
         stage2FadeInTexts[4] = stoneObstacleCountText;
         stage2FadeInTexts[5] = vaseObstacleCountText;
         
+        fadeOutImages[0] = playgroundBackgroundImage;
+        fadeOutImages[1] = levelDataBackgroundImage;
+        fadeOutImages[2] = boxObstacleImage;
+        fadeOutImages[3] = boxObstacleBackgroundImage;
+        fadeOutImages[4] = stoneObstacleImage;
+        fadeOutImages[5] = stoneObstacleBackgroundImage;
+        fadeOutImages[6] = vaseObstacleImage;
+        fadeOutImages[7] = vaseObstacleBackgroundImage;
+        
+        fadeOutTexts[0] = moveCountText;
+        fadeOutTexts[1] = moveText;
+        fadeOutTexts[2] = obstacleText;
+        fadeOutTexts[3] = boxObstacleCountText;
+        fadeOutTexts[4] = stoneObstacleCountText;
+        fadeOutTexts[5] = vaseObstacleCountText;
+        
         setAlphaZero();
         
-        fadeInScene();
+        fadeInPlayScene();
     }
 
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
-
-    public void highlightBlock(int row, int col)
-    {
-        GameObject highlighter = Instantiate(highlighterPrefab, blockParticleTransform);
-        RectTransform rectTransform = highlighter.GetComponent<RectTransform>();
-        rectTransform.anchoredPosition3D = cellUIPositionMatrix[row][col];
-    }
-
-    public void blockClickedParticles(int row, int col)
-    {
-        GameObject particle = Instantiate(blockClickedParticlePrefab, blockParticleTransform);
-        RectTransform rectTransform = particle.GetComponent<RectTransform>();
-        rectTransform.anchoredPosition3D = cellUIPositionMatrix[row][col];
-    }
-    
-    public void rocketCreatedParticles(int row, int col)
-    {
-        GameObject particle = Instantiate(rocketCreatedParticlePrefab, blockParticleTransform);
-        RectTransform rectTransform = particle.GetComponent<RectTransform>();
-        rectTransform.anchoredPosition3D = cellUIPositionMatrix[row][col];
-    }
-
+    //=============================================================================================== Scene Fade Actions
     void setAlphaZero()
     {
         foreach (Image image in stage1FadeInImages)
@@ -147,7 +151,7 @@ public class UIScript : MonoBehaviour
         }
     }
 
-    void fadeInScene()
+    void fadeInPlayScene()
     {
         stage1ElementsFadeIn();
         Invoke("stage2ElementsFadeIn", 0.5f);
@@ -163,18 +167,60 @@ public class UIScript : MonoBehaviour
         StartCoroutine(fadeInImageArray(stage2FadeInImages, 0.5f));
         StartCoroutine(fadeInTextArray(stage2FadeInTexts, 0.5f));
     }
-
-    public void playgroundFadeIn(Image[] images)
+    
+    public void setBlockImages(Image[] images)
     {
         playgroundBlockImages = images;
-        Invoke("playgroundFadeInInvoke", 0.5f);
+    }
+
+    public void playgroundFadeIn()
+    {
+        Invoke("playgroundFadeInInvoke", 1f);
     }
 
     void playgroundFadeInInvoke()
     {
         StartCoroutine(fadeInImageArray(playgroundBlockImages, 0.5f));
     }
+    
+    //=========================================================
+    void playSceneFadeOut()
+    {
+        logicScript.uiScriptSetBlockImages();
+        
+        StartCoroutine(fadeOutImageArray(fadeOutImages, 0.5f));
+        StartCoroutine(fadeOutTextArray(fadeOutTexts, 0.5f));
+        StartCoroutine(fadeOutPlaygroundImageArray(playgroundBlockImages, 0.5f));
+    }
+    
+    
+    //======================================================================================================== Particles
+    public void highlightBlock(int row, int col)
+    {
+        GameObject highlighter = Instantiate(highlighterPrefab, blockParticleTransform);
+        RectTransform rectTransform = highlighter.GetComponent<RectTransform>();
+        rectTransform.anchoredPosition3D = cellUIPositionMatrix[row][col];
+    }
 
+    public void blockClickedParticles(int row, int col)
+    {
+        GameObject particle = Instantiate(blockClickedParticlePrefab, blockParticleTransform);
+        RectTransform rectTransform = particle.GetComponent<RectTransform>();
+        rectTransform.anchoredPosition3D = cellUIPositionMatrix[row][col];
+    }
+    
+    public void rocketCreatedParticles(int row, int col)
+    {
+        GameObject particle = Instantiate(rocketCreatedParticlePrefab, blockParticleTransform);
+        GameObject particle2 = Instantiate(rocketCreatedParticle2Prefab, blockParticleTransform);
+        RectTransform rectTransform = particle.GetComponent<RectTransform>();
+        RectTransform rectTransform2 = particle2.GetComponent<RectTransform>();
+        rectTransform.anchoredPosition3D = cellUIPositionMatrix[row][col];
+        rectTransform2.anchoredPosition3D = cellUIPositionMatrix[row][col];
+    }
+    
+    
+    //=============================================================================================== Playground Actions
     public void setTexts(int moveCount, int boxObstacleCount, int stoneObstacleCount, int vaseObstacleCount)
     {
         moveCountText.text = moveCount.ToString();
@@ -200,8 +246,6 @@ public class UIScript : MonoBehaviour
         this.playgroundTransform = transform;
     }
     
-    //==================================================================================================================
-
     class RocketSpriteProvider
     {
         private Sprite leftRocketSprite;
@@ -264,6 +308,9 @@ public class UIScript : MonoBehaviour
                 }
             
                 flags[flagIndex] = true;
+                
+                audioScript.playBlockFellDownSound(); //===== AUDIO
+                
                 yield break;
             }
         
@@ -324,7 +371,6 @@ public class UIScript : MonoBehaviour
             {
                 Destroy(rocket1);
                 Destroy(rocket2);
-                Debug.Log("row:"+row+", col:"+col+"\nui flag.setTrue()");
                 flag.setTrue();
                 yield break;
             }
@@ -394,26 +440,50 @@ public class UIScript : MonoBehaviour
         }
     }
     
-    //==================================================================================================================
-
+    
+    //=================================================================================================== Button Actions
     public void continueButtonClicked()
     {
-        SceneManager.LoadScene("LevelSelectScene", LoadSceneMode.Single);
+        audioScript.playButtonClickedSound();
+        
+        fadeOutImages[8] = congratsTextImage;
+        fadeOutImages[9] = continueButtonImage;
+        fadeOutTexts[6] = continueButtonText;
+        
+        playSceneFadeOut();
+        StartCoroutine(fadeOutEndScreenBackgroundImage(0.75f));
+        
+        Invoke("openLevelSelectScene", 0.9f);
     }
     
     public void menuButtonClicked()
     {
+        audioScript.playButtonClickedSound();
+        
+        fadeOutImages[8] = gameOverTextImage;
+        fadeOutImages[9] = menuButtonImage;
+        fadeOutTexts[6] = menuButtonText;
+        
+        playSceneFadeOut();
+        StartCoroutine(fadeOutEndScreenBackgroundImage(0.75f));
+        
+        Invoke("openLevelSelectScene", 0.9f);
+    }
+
+    void openLevelSelectScene()
+    {
         SceneManager.LoadScene("LevelSelectScene", LoadSceneMode.Single);
     }
     
-    //==================================================================================================================
+    
+    //================================================================================================== Set End Screens
     void setEndScreenBackground(float fadeInTime)
     {
         endScreenBackgroundImage.transform.gameObject.SetActive(true);
         StartCoroutine(fadeInEndScreenBackgroundImage(fadeInTime));
     }
     
-    //======================================================
+    //================================================= Game Over
     public void setGameOverUI()
     {
         setEndScreenBackground(0.3f);
@@ -438,7 +508,7 @@ public class UIScript : MonoBehaviour
         StartCoroutine(setTextScale(gameOverTextImageTransform, setTime));
     }
 
-    //======================================================
+    //================================================= Won
     public void setLevelWonUI()
     {
         setEndScreenBackground(0.3f);
@@ -487,7 +557,7 @@ public class UIScript : MonoBehaviour
         }
     }
 
-    IEnumerator fadeInEndScreenBackgroundImage(float fadeInTime)
+    IEnumerator fadeInEndScreenBackgroundImage(float fadeInTime) // alpha = 220/255
     {
         float timer = 0;
         
@@ -506,6 +576,31 @@ public class UIScript : MonoBehaviour
             }
             
             c.a = (timer / fadeInTime) * 220/255f;
+            endScreenBackgroundImage.color = c;
+            
+            yield return null;
+        }
+    }
+    
+    IEnumerator fadeOutEndScreenBackgroundImage(float fadeOutTime) // alpha = 220/255
+    {
+        float timer = 0;
+        
+        Color c = endScreenBackgroundImage.color;
+        c.a = 0;
+
+        while (true)
+        {
+            timer += Time.deltaTime;
+            
+            if (timer >= fadeOutTime)
+            {
+                c.a = 0f;
+                endScreenBackgroundImage.color = c;
+                yield break;
+            }
+            
+            c.a = (1 - (timer / fadeOutTime)) * 220/255f;
             endScreenBackgroundImage.color = c;
             
             yield return null;
@@ -537,6 +632,7 @@ public class UIScript : MonoBehaviour
             yield return null;
         }
     }
+    
     
     //==================================================================================================================
     IEnumerator fadeInImageArray(Image[] images, float fadeInTime)
@@ -593,6 +689,102 @@ public class UIScript : MonoBehaviour
             {
                 c = text.color;
                 c.a = (timer / fadeInTime);
+                text.color = c;
+            }
+            
+            yield return null;
+        }
+    }
+    
+    IEnumerator fadeOutImageArray(Image[] images, float fadeOutTime)
+    {
+        float timer = 0;
+
+        Color c = new Color();
+        c.r = 255;
+        c.g = 255;
+        c.b = 255;
+        c.a = 1;
+
+        while (true)
+        {
+            timer += Time.deltaTime;
+            
+            if (timer >= fadeOutTime)
+            {
+                c.a = 0;
+                foreach (Image image in images) image.color = c;
+                yield break;
+            }
+            
+            c.a = 1 - (timer / fadeOutTime);
+            
+            foreach (Image image in images) image.color = c;
+            
+            yield return null;
+        }
+    }
+    
+    IEnumerator fadeOutPlaygroundImageArray(Image[] images, float fadeOutTime)
+    {
+        float timer = 0;
+
+        Color c = new Color();
+        c.r = 255;
+        c.g = 255;
+        c.b = 255;
+        c.a = 1;
+
+        while (true)
+        {
+            timer += Time.deltaTime;
+            
+            if (timer >= fadeOutTime)
+            {
+                c.a = 0;
+                foreach (Image image in images)
+                {
+                    if(image != null) image.color = c;
+                }
+                yield break;
+            }
+            
+            c.a = 1 - (timer / fadeOutTime);
+            
+            foreach (Image image in images)
+            {
+                if(image != null) image.color = c;
+            }
+            
+            yield return null;
+        }
+    }
+
+    IEnumerator fadeOutTextArray(TextMeshProUGUI[] texts, float fadeOutTime)
+    {
+        float timer = 0;
+
+        Color c;
+
+        while (true)
+        {
+            timer += Time.deltaTime;
+            
+            if (timer >= fadeOutTime)
+            {
+                foreach (TextMeshProUGUI text in texts)
+                {
+                    c = text.color;
+                    c.a = 0;
+                    text.color = c;
+                }
+                yield break;
+            }
+            
+            foreach (TextMeshProUGUI text in texts)
+            {
+                c = text.color;
+                c.a = 1 - (timer / fadeOutTime);
                 text.color = c;
             }
             

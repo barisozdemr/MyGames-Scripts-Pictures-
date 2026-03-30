@@ -2,8 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using UnityEditor.Timeline.Actions;
+using Microsoft.Win32.SafeHandles;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -22,6 +21,9 @@ public class LogicScript : MonoBehaviour
 
     public GameObject UIManager;
     private UIScript uiScript;
+
+    public GameObject AudioManager;
+    private AudioScript audioScript;
     
     private Random random = new Random();
 
@@ -52,15 +54,15 @@ public class LogicScript : MonoBehaviour
         uiScript = UIManager.GetComponent<UIScript>();
         uiScript.setPlaygroundTransform(playgroundTransform);
         
+        audioScript = AudioManager.GetComponent<AudioScript>();
+        
         buildLevel();
+
+        game.isAnimationPlaying = true; // wait until playground fades in
         
         playgroundFadeIn();
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
         
+        Invoke("setAnimationPlayingBoolFalse", 1.5f);
     }
 
     public void openLevelSelectScene()
@@ -68,7 +70,12 @@ public class LogicScript : MonoBehaviour
         SceneManager.LoadScene("LevelSelectScene", LoadSceneMode.Single);
     }
 
-    void playgroundFadeIn()
+    void setAnimationPlayingBoolFalse()
+    {
+        game.isAnimationPlaying = false;
+    }
+
+    public void uiScriptSetBlockImages()
     {
         int rowCount = game.getMap().GetLength(0);
         int colCount = game.getMap()[0].GetLength(0);
@@ -79,11 +86,21 @@ public class LogicScript : MonoBehaviour
         {
             for (int j = 0; j < colCount; j++)
             {
-                images[j+(i*colCount)] = game.getMap()[i][j].image;
+                if (game.getMap()[i][j] != null)
+                {
+                    images[j+(i*colCount)] = game.getMap()[i][j].image;
+                }
             }
         }
         
-        uiScript.playgroundFadeIn(images);
+        uiScript.setBlockImages(images);
+    }
+
+    void playgroundFadeIn()
+    {
+        uiScriptSetBlockImages();
+        
+        uiScript.playgroundFadeIn();
     }
 
     void buildLevel()
@@ -127,8 +144,8 @@ public class LogicScript : MonoBehaviour
         Block[][] blocks = new Block[rowCount][];
         for(int i=0; i<rowCount; i++) blocks[i] = new Block[colCount];
 
-        BlockFactory factory = new BlockFactory(levelGridBlocksData, logicScriptInstance, uiScript, 
-            spriteProvider, playgroundTransform, rowCount, colCount, random);
+        BlockFactory factory = new BlockFactory(levelGridBlocksData, logicScriptInstance, spriteProvider, 
+            playgroundTransform, rowCount, colCount, random);
 
         //========================================================================================= Create Blocks
         for (int i=0 ; i<rowCount ; i++)
@@ -196,8 +213,10 @@ public class LogicScript : MonoBehaviour
         setComboCounts(game);
     }
 
-    void setComboCounts(Game game)
+    bool setComboCounts(Game game)
     {
+        bool noCombo = true;
+        
         HashSet<Block> alreadySetBlocks = new HashSet<Block>();
         
         for (int i = 0; i < game.getRowCount(); i++)
@@ -237,8 +256,13 @@ public class LogicScript : MonoBehaviour
                     
                     alreadySetBlocks.Add(b);
                 }
+                
+                if(noCombo && totalComboCount > 1) noCombo = false;
             }
         }
+
+        if(noCombo) return false;
+        return true;
     }
 
     int getComboCountDFS(Block block, HashSet<Block> thisLoop, BlockType type, Game game, int row, int col)
@@ -393,6 +417,7 @@ public class LogicScript : MonoBehaviour
             }
         }
 
+        //====================================
         public Block[][] getMap()
         {
             return map;
@@ -407,7 +432,8 @@ public class LogicScript : MonoBehaviour
         {
             return colCount;
         }
-
+        
+        //====================================
         public void addDestroyedBlock(int row, int column)
         {
             if (!destroyedBlocksRowAndColumn.Contains((row, column))) destroyedBlocksRowAndColumn.Add((row, column));
@@ -431,19 +457,19 @@ public class LogicScript : MonoBehaviour
             {
                 File.WriteAllText(LEVELNUMBERPATH, (int.Parse(logicScript.levelNumber) + 1).ToString());
                 isGameDone = true;
-                Debug.Log("Level Won!");
 
                 uiScript.Invoke("setLevelWonUI", 1);
+                
+                logicScript.audioScript.playGameWonSoundInvoke(0.5f);
             }
-            if (moveCount == 0) // game over!
+            else if (moveCount == 0) // game over!
             {
                 isGameDone = true;
-                Debug.Log("Game Over!");
                 
                 uiScript.Invoke("setGameOverUI", 1);
+                
+                logicScript.audioScript.playGameOverSoundInvoke(0.5f);
             }
-            
-            Debug.Log("boxCount: "+boxCount+"stoneCount: "+stoneCount+"vaseCount: "+vaseCount+"\nmoveCount: "+moveCount);
         }
 
         public void addRocket(int row, int col)
@@ -459,7 +485,6 @@ public class LogicScript : MonoBehaviour
 
         public void rocketClicked(string direction, int row, int col)
         {
-            //particle
             logicScript.StartCoroutine(shootRocketsMasterCoroutine(direction, row, col));
         }
 
@@ -491,6 +516,8 @@ public class LogicScript : MonoBehaviour
         
         IEnumerator shootRocketsHorizontal(int row, int col, float timeStep, BoolRef flag)
         {
+            logicScript.audioScript.playRocketShootedSound(); //===== AUDIO
+            
             List<BoolRef> newFlags = new List<BoolRef>();
             
             HashSet<Block> damagedBlocks = new HashSet<Block>(); // check for double damage
@@ -531,6 +558,8 @@ public class LogicScript : MonoBehaviour
                         damagedBlocks.Add(map[row][col - step]);
                     
                         map[row][col - step].decreaseHealth();
+                        
+                        logicScript.audioScript.playRocketHitSound(); //===== AUDIO
                     
                         if (map[row][col - step].isRocket && !map[row][col - step].isRocketShooted)
                         {
@@ -549,8 +578,11 @@ public class LogicScript : MonoBehaviour
                     if (map[row][col + step] != null && !damagedBlocks.Contains(map[row][col + step]))
                     {
                         damagedBlocks.Add(map[row][col + step]);
-                    
-                        map[row][col + step].decreaseHealth();
+
+                        if (map[row][col + step].decreaseHealth())
+                        {
+                            logicScript.audioScript.playRocketHitSound(); //===== AUDIO
+                        }
                     
                         if (map[row][col + step].isRocket && !map[row][col + step].isRocketShooted)
                         {
@@ -570,6 +602,8 @@ public class LogicScript : MonoBehaviour
         
         IEnumerator shootRocketsVertical(int row, int col, float timeStep, BoolRef flag)
         {
+            logicScript.audioScript.playRocketShootedSound(); //===== AUDIO
+            
             List<BoolRef> newFlags = new List<BoolRef>();
             
             HashSet<Block> damagedBlocks = new HashSet<Block>();
@@ -610,6 +644,8 @@ public class LogicScript : MonoBehaviour
                         damagedBlocks.Add(map[row - step][col]);
                     
                         map[row - step][col].decreaseHealth();
+                        
+                        logicScript.audioScript.playRocketHitSound(); //===== AUDIO
                     
                         if (map[row - step][col].isRocket && !map[row - step][col].isRocketShooted)
                         {
@@ -630,6 +666,8 @@ public class LogicScript : MonoBehaviour
                         damagedBlocks.Add(map[row + step][col]);
                     
                         map[row + step][col].decreaseHealth();
+                        
+                        logicScript.audioScript.playRocketHitSound(); //===== AUDIO
 
                         if (map[row + step][col].isRocket && !map[row + step][col].isRocketShooted)
                         {
@@ -672,12 +710,6 @@ public class LogicScript : MonoBehaviour
             
             checkIfGameIsOver();
             fallColumnsAndSetCombo();
-        }
-
-        public void blockClicked(int row, int col)
-        {
-            //particle
-            next();
         }
 
         public void fallColumnsAndSetCombo()
@@ -723,17 +755,9 @@ public class LogicScript : MonoBehaviour
             foreach (var pair in destroyedRowsOfFallingColumns)
             {
                 int column = pair.Key;
-                Debug.Log("COLUMN:"+column);
                 List<int> destroyedRows = pair.Value;
             
                 destroyedRows.Sort((a, b) => b.CompareTo(a));
-
-                string debug = "destroyedRows: ";
-                foreach (var row in destroyedRows)
-                {
-                    debug += row + ",";
-                }
-                Debug.Log(debug);
                 
                 //================================================================== shift columns and add new blocks
                 
@@ -773,18 +797,7 @@ public class LogicScript : MonoBehaviour
                 
                 addRandomBlocksToColumnAndShift(column, shiftCountOfRowSorted, dropCount);
                 
-                //================================== DEBUG
-                debug = "shiftCountOfRowSorted:\n";
-                foreach (var pair2 in shiftCountOfRowSorted)
-                {
-                    debug += "(row:" + pair2.Item1 + ", shift:" + pair2.Item2 + ")\n";
-                }
-                Debug.Log(debug);
-                //================================== DEBUG
-                
                 //================================================================== fall columns ui
-                
-                debugLogDropCountOfRows(dropCountOfRows);
                 
                 foreach (var pair2 in dropCountOfRows) // set shifted indexes of rows and sort
                 {
@@ -798,8 +811,6 @@ public class LogicScript : MonoBehaviour
                         dropRows[i] += dropCount2;
                     }
                 }
-                
-                debugLogDropCountOfRows(dropCountOfRows);
 
                 if (dropCount > 0)
                 {
@@ -820,8 +831,6 @@ public class LogicScript : MonoBehaviour
                         }
                     }
                 }
-                
-                debugLogDropCountOfRows(dropCountOfRows);
 
                 foreach (var pair2 in dropCountOfRows) // set fall data of column
                 {
@@ -830,41 +839,41 @@ public class LogicScript : MonoBehaviour
                     
                     fallDataOfColumns.Add((column, dropRows, dropCount2));
                 }
-                
-                //================================== DEBUG
-                debug = "fallDataOfColumns:\n";
-                foreach (var pair2 in fallDataOfColumns)
-                {
-                    debug += "(col:" + pair2.Item1 + ", dropCount:" + pair2.Item3 + ", rows:";
-                    foreach (int row in pair2.Item2)
-                    {
-                        debug += row + ",";
-                    }
-                    debug += "\n";
-                }
-                Debug.Log(debug);
-                //================================== DEBUG
             }
-            
-            logicScript.setComboCounts(this);
+
+            if (!isGameDone && !logicScript.setComboCounts(this)) // no combo found
+            {
+                bool haveRocket = false;
+                
+                foreach (Block[] b1 in map)
+                {
+                    foreach (Block b in b1)
+                    {
+                        if(b == null) continue;
+                        
+                        if (b.getType() == BlockType.HorizontalRocket || b.getType() == BlockType.VerticalRocket)
+                        {
+                            haveRocket = true;
+                            break;
+                        }
+                    }
+
+                    if (haveRocket) break;
+                }
+
+                if (!haveRocket) //===== GAME OVER
+                {
+                    isGameDone = true;
+                
+                    uiScript.Invoke("setGameOverUI", 1);
+                
+                    logicScript.audioScript.playGameOverSoundInvoke(0.5f);
+                }
+            }
                 
             destroyedBlocksRowAndColumn.Clear();
                 
             logicScript.StartCoroutine(masterFallCoroutine(fallDataOfColumns));
-        }
-
-        void debugLogDropCountOfRows(Dictionary<int, List<int>> dropCountOfRows)
-        {
-            string debug = "dropCountOfRows:\n";
-            foreach (var pair in dropCountOfRows)
-            {
-                debug += "dropCount:" + pair.Key + ", rows:";
-                foreach (var row in pair.Value)
-                {
-                    debug += row + ",";
-                }
-            }
-            Debug.Log(debug);
         }
 
         void addRandomBlocksToColumnAndShift(int column, List<(int, int)> shiftCountOfRowSorted, int newBlockCount)
@@ -1053,7 +1062,6 @@ public class LogicScript : MonoBehaviour
     class Block
     {
         private LogicScript logicScript;
-        private UIScript uiScript;
         private Game game;
         private Transform playgroundTransform;
         private BlockSpriteProvider spriteProvider;
@@ -1077,11 +1085,10 @@ public class LogicScript : MonoBehaviour
         public int column;
         public int health;
 
-        public Block(BlockType type, BlockSpriteProvider provider, int row, int column, Transform playgroundTransform, 
-            LogicScript logicScript, UIScript uiScript)
+        public Block(BlockType type, BlockSpriteProvider provider, int row, int column, 
+            Transform playgroundTransform, LogicScript logicScript)
         {
             this.logicScript = logicScript;
-            this.uiScript = uiScript;
             this.playgroundTransform = playgroundTransform;
             this.spriteProvider = provider;
             
@@ -1229,7 +1236,8 @@ public class LogicScript : MonoBehaviour
                 if (comboCount <= 1 || game.isAnimationPlaying || game.isGameDone) return;
             
                 game.decreaseMoveCount();
-                uiScript.blockClickedParticles(row, column);
+                logicScript.uiScript.blockClickedParticles(row, column);
+                logicScript.audioScript.playBlockClickedSound(); //===== AUDIO
                 
                 foreach (Block block in comboBlocks)
                 {
@@ -1245,7 +1253,7 @@ public class LogicScript : MonoBehaviour
                     if (blockRow+1 < game.getRowCount() && game.getMap()[blockRow+1][blockColumn] != null && game.getMap()[blockRow+1][blockColumn].isObstacle) 
                         game.getMap()[blockRow+1][blockColumn].decreaseHealth();
                 
-                    uiScript.highlightBlock(blockRow, blockColumn);
+                    logicScript.uiScript.highlightBlock(blockRow, blockColumn);
                     block.destroyBlock();
                 }
 
@@ -1254,7 +1262,8 @@ public class LogicScript : MonoBehaviour
                     game.destroyedBlocksRowAndColumn.Remove((row, column));
                     game.addRocket(row, column);
                     
-                    uiScript.rocketCreatedParticles(row, column);
+                    logicScript.uiScript.rocketCreatedParticles(row, column);
+                    logicScript.audioScript.playRocketCreatedSound(); //===== AUDIO
                 }
                 
                 game.next();
@@ -1263,6 +1272,7 @@ public class LogicScript : MonoBehaviour
             {
                 if (game.isAnimationPlaying || game.isGameDone) return;
                 
+                logicScript.audioScript.playRocketShootedSound(); //===== AUDIO
                 game.decreaseMoveCount();
                 destroyBlock();
 
@@ -1297,6 +1307,7 @@ public class LogicScript : MonoBehaviour
                 if (type == BlockType.Vase)
                 {
                     setSpriteCrackedVase();
+                    logicScript.audioScript.playVaseCrackedSound();
                 }
             }
 
@@ -1305,7 +1316,14 @@ public class LogicScript : MonoBehaviour
 
         void destroyBlock()
         {
-            if(isObstacle) game.decreaseObstacleCount(type);
+            if(isObstacle)
+            {
+                game.decreaseObstacleCount(type);
+                
+                if(type == BlockType.Box) logicScript.audioScript.playBoxDestroyedSound(); //===== AUDIO
+                else if(type == BlockType.Stone) logicScript.audioScript.playStoneDestroyedSound(); //===== AUDIO
+                else if(type == BlockType.Vase) logicScript.audioScript.playVaseDestroyedSound(); //===== AUDIO
+            }
             game.addDestroyedBlock(row, column);
             
             logicScript.StartCoroutine(collapseDestroy(0.1f));
@@ -1336,7 +1354,6 @@ public class LogicScript : MonoBehaviour
     class BlockFactory
     {
         private LogicScript logicScript;
-        private UIScript uiScript;
         private Random random;
         private Game game;
         
@@ -1348,11 +1365,10 @@ public class LogicScript : MonoBehaviour
         private int rowCount;
         private int columnCount;
         
-        public BlockFactory(string levelBlocksData, LogicScript logicScript, UIScript uiScript, 
-            BlockSpriteProvider provider, Transform playgroundTransform, int rowCount, int columnCount, Random random)
+        public BlockFactory(string levelBlocksData, LogicScript logicScript, BlockSpriteProvider provider, 
+            Transform playgroundTransform, int rowCount, int columnCount, Random random)
         {
             this.logicScript = logicScript;
-            this.uiScript = uiScript;
             this.provider = provider;
             this.playgroundTransform = playgroundTransform;
             this.rowCount = rowCount;
@@ -1412,7 +1428,7 @@ public class LogicScript : MonoBehaviour
             BlockType type = types[index];
             index++;
             
-            Block block = new Block(type, provider, row, col, playgroundTransform, logicScript, uiScript);
+            Block block = new Block(type, provider, row, col, playgroundTransform, logicScript);
             
             Color c = block.image.color;
             c.a = 0;
@@ -1427,10 +1443,10 @@ public class LogicScript : MonoBehaviour
 
             Block block;
             
-            if (randNum == 0) block = new Block(BlockType.Red, provider, row, col, playgroundTransform, logicScript, uiScript);
-            else if (randNum == 1) block = new Block(BlockType.Green, provider, row, col, playgroundTransform, logicScript, uiScript);
-            else if (randNum == 2) block = new Block(BlockType.Blue, provider, row, col, playgroundTransform, logicScript, uiScript);
-            else /* (randNum == 3) */ block = new Block(BlockType.Yellow, provider, row, col, playgroundTransform, logicScript, uiScript);
+            if (randNum == 0) block = new Block(BlockType.Red, provider, row, col, playgroundTransform, logicScript);
+            else if (randNum == 1) block = new Block(BlockType.Green, provider, row, col, playgroundTransform, logicScript);
+            else if (randNum == 2) block = new Block(BlockType.Blue, provider, row, col, playgroundTransform, logicScript);
+            else /* (randNum == 3) */ block = new Block(BlockType.Yellow, provider, row, col, playgroundTransform, logicScript);
             
             block.setGame(game);
 
@@ -1443,8 +1459,8 @@ public class LogicScript : MonoBehaviour
             
             Block block;
     
-            if (randNum == 0) block = new Block(BlockType.HorizontalRocket, provider, row, col, playgroundTransform, logicScript, uiScript);
-            else block = new Block(BlockType.VerticalRocket, provider, row, col, playgroundTransform, logicScript, uiScript);
+            if (randNum == 0) block = new Block(BlockType.HorizontalRocket, provider, row, col, playgroundTransform, logicScript);
+            else block = new Block(BlockType.VerticalRocket, provider, row, col, playgroundTransform, logicScript);
             
             block.setGame(game);
 

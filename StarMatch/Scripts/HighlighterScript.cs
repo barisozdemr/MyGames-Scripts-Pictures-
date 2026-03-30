@@ -14,7 +14,6 @@ public class HighlighterScript : MonoBehaviour
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-        Debug.Log("highlighter instantiated");
         image = this.GetComponent<Image>();
         
         Color c = image.color;
